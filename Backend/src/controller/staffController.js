@@ -1,4 +1,11 @@
 const db = require("../config/db");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+
+// Generate JWT token
+const generateToken = (id, role) => {
+  return jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: "7d" });
+};
 
 //    Get all staff
 //    GET /api/staff
@@ -21,13 +28,44 @@ const GetAllStaff = async (req, res) => {
 //    POST /api/staff
 const CreateStaff = async (req, res) => {
   try {
-    const { first_name, last_name, email, department, role, salary, phone } = req.body;
+    const { first_name, last_name, email, password, department, role, salary, phone } = req.body;
+
+    if (!first_name || !last_name || !email || !password || !department || !role || !salary) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    //checking email uniqueness and existing user
+    const [existingUser] = await db.query("SELECT id FROM users WHERE email=?", [email]);
+    if (existingUser.length > 0) {
+      return res.status(400).json({ message: "Email already in use" });
+    }
+
+    //hashing password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     const [result] = await db.query(
-      "INSERT INTO `staff` (`first_name`, `last_name`, `email`, `department`, `role`, `salary`, `phone`) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [first_name, last_name, email, department, role, salary, phone]
+      "INSERT INTO `staff` (`first_name`, `last_name`, `email`, `password`, `department`, `role`, `salary`, `phone`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [first_name, last_name, email, hashedPassword, department, role, salary, phone]
     );
-    res.status(201).json({ message: "Staff created", id: result.insertId });
+    if(result.affectedRows === 1) {
+    res.status(201).json({ 
+      message: "Staff created", 
+      user: {
+        id: result.insertId,
+        first_name,
+        last_name,
+        email,
+        department,
+        role,
+        salary,
+        phone
+        },
+        token: generateToken(result.insertId, role), 
+     });
+    } else {
+      res.status(500).json({ message: "Failed to create staff" });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
@@ -39,11 +77,11 @@ const CreateStaff = async (req, res) => {
 const UpdateStaff = async (req, res) => {
   try {
     const { id } = req.params;
-    const { first_name, last_name, email, department, role, salary, phone } = req.body;
+    const { first_name, last_name, email, password, department, role, salary, phone } = req.body;
 
     await db.query(
-      "UPDATE `staff` SET `first_name`=?, `last_name`=?, `email`=?, `department`=?, `role`=?, `salary`=?, `phone`=? WHERE id=?",
-      [first_name, last_name, email, department, role, salary, phone, id]
+      "UPDATE `staff` SET `first_name`=?, `last_name`=?, `email`=?, `password`=?, `department`=?, `role`=?, `salary`=?, `phone`=? WHERE id=?",
+      [first_name, last_name, email, password, department, role, salary, phone, id]
     );
     res.status(200).json({ message: "Staff updated successfully" });
   } catch (error) {

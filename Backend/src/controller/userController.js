@@ -67,6 +67,49 @@ const CreateNewUser = async (req, res) => {
 
 //    Login user on the system
 //    POST /api/users/login
+// const UserLogin = async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
+
+//     if (!email || !password) {
+//       return res
+//         .status(400)
+//         .json({ message: "Please enter your email and password" });
+//     }
+
+//     const [users] = await db.query("SELECT * FROM `users` WHERE email = ?", [
+//       email,
+//     ]);
+
+//     if (users.length === 0) {
+//       return res.status(401).json({ message: "Invalid credentials" });
+//     }
+
+//     const user = users[0];
+
+//     // Compare password with hashed DB password
+//     const isMatch = await bcrypt.compare(password, user.password);
+
+//     if (isMatch) {
+//       res.status(200).json({
+//         message: "Login successful",
+//         user: {
+//           id: user.id,
+//           name: user.name,
+//           email: user.email,
+//           role_id: user.role_id,
+//         },
+//         token: generateToken(user.id, user.role_id),
+//       });
+//     } else {
+//       res.status(401).json({ message: "Invalid credentials" });
+//     }
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// };
+// POST /api/users/login
 const UserLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -77,33 +120,134 @@ const UserLogin = async (req, res) => {
         .json({ message: "Please enter your email and password" });
     }
 
-    const [users] = await db.query("SELECT * FROM `users` WHERE email = ?", [
-      email,
-    ]);
+    // UNION query to check all three tables
+    const [results] = await db.query(`
+      SELECT 
+        'user' as user_type,
+        id,
+        name as display_name,
+        email,
+        password,
+        role_id,
+        NULL as first_name,
+        NULL as last_name,
+        NULL as department,
+        NULL as role,
+        NULL as full_name,
+        NULL as school_name,
+        NULL as trade,
+        NULL as level,
+        NULL as payment_status,
+        NULL as phone
+      FROM users 
+      WHERE email = ?
+      
+      UNION ALL
+      
+      SELECT 
+        'staff' as user_type,
+        id,
+        CONCAT(first_name, ' ', last_name) as display_name,
+        email,
+        password,
+        NULL as role_id,
+        first_name,
+        last_name,
+        department,
+        role,
+        NULL as full_name,
+        NULL as school_name,
+        NULL as trade,
+        NULL as level,
+        NULL as payment_status,
+        phone
+      FROM staff 
+      WHERE email = ?
+      
+      UNION ALL
+      
+      SELECT 
+        'student' as user_type,
+        id,
+        full_name as display_name,
+        email,
+        password,
+        NULL as role_id,
+        NULL as first_name,
+        NULL as last_name,
+        NULL as department,
+        NULL as role,
+        full_name,
+        school_name,
+        trade,
+        level,
+        payment_status,
+        phone
+      FROM students 
+      WHERE email = ?
+    `, [email, email, email]);
 
-    if (users.length === 0) {
+    // Check if user exists in any table
+    if (results.length === 0) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const user = users[0];
+    const user = results[0];
 
     // Compare password with hashed DB password
     const isMatch = await bcrypt.compare(password, user.password);
 
-    if (isMatch) {
-      res.status(200).json({
-        message: "Login successful",
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role_id: user.role_id,
-        },
-        token: generateToken(user.id, user.role_id),
-      });
-    } else {
-      res.status(401).json({ message: "Invalid credentials" });
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
+
+    // Prepare response based on user type
+    let responseData = {
+      message: "Login successful",
+      userType: user.user_type,
+      token: generateToken(user.id, user.user_type, user.role_id)
+    };
+
+    // Format user data based on type
+    switch (user.user_type) {
+      case 'user':
+        responseData.user = {
+          id: user.id,
+          name: user.display_name,
+          email: user.email,
+          role_id: user.role_id
+        };
+        break;
+      
+      case 'staff':
+        responseData.user = {
+          id: user.id,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          name: user.display_name,
+          email: user.email,
+          department: user.department,
+          role: user.role,
+          phone: user.phone
+        };
+        break;
+      
+      case 'student':
+        responseData.user = {
+          id: user.id,
+          name: user.full_name,
+          email: user.email,
+          schoolName: user.school_name,
+          trade: user.trade,
+          level: user.level,
+          paymentStatus: user.payment_status,
+          phone: user.phone
+        };
+        break;
+    }
+
+    res.status(200).json(responseData);
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
