@@ -20,6 +20,7 @@ const StudentFeaturesRouter = require("./src/Router/studentFeaturesRouter");
 const StudentRouter = require("./src/Router/studentRouter");
 const TradeRouter = require("./src/Router/tradeRouter");
 const LevelRouter = require("./src/Router/levelRouter");
+const NotificationRouter = require("./src/Router/notificationRouter");
 
 // Register Routes
 App.use("/api/users", UserRouter);
@@ -35,6 +36,7 @@ App.use("/api/student-features", StudentFeaturesRouter);
 App.use("/api/students", StudentRouter);
 App.use("/api/trades", TradeRouter);
 App.use("/api/levels", LevelRouter);
+App.use("/api/notifications", NotificationRouter);
 
 // Start Server
 const Port = process.env.PORT || 4500;
